@@ -1,0 +1,150 @@
+---
+title: "EW Lake Sampling"
+author: "Sandra Rabow"
+date: "11/24/2021"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+
+
+# Libraries
+```{r include=FALSE}
+library(car)
+library(Hmisc)
+library(lmtest)
+library(MuMIn)
+library(readxl)
+
+
+
+```
+
+
+```{r}
+#Multiple linear regression analysis
+#Create link to datafile called EW_Data_Stats
+data.ord <- read_excel('EW_Data_Stats')
+
+data.temp1 <- subset(data.ord, data.ord$Month!=5)
+str(data.temp1)
+
+#Not sure why but some of my data is showing up as character instead of numeric - below is a quick fix.
+data.temp1$TP <- as.numeric(data.temp1$TP)
+data.temp1$SRP <- as.numeric(data.temp1$SRP)
+data.temp1$TN <- as.numeric(data.temp1$TN)
+data.temp1$NH4 <- as.numeric(data.temp1$NH4)
+data.temp1$NO3.NO2 <- as.numeric(data.temp1$NO3.NO2)
+data.temp1$TN.TP <- as.numeric(data.temp1$TN.TP)
+data.temp1$DIN <- as.numeric(data.temp1$DIN)
+data.temp1$DIN.DIP <- as.numeric(data.temp1$DIN.DIP)
+
+data.temp2 <- data.temp1[,c(6,8)]
+data.temp3 <- data.temp1[,c(20:32)]
+str(data.temp2)
+
+#Log transform dependents
+data.temp2.log <- log10(10*data.temp2 + 1)
+
+#Scale independants (z-score)
+data.temp3.scale <- scale(data.temp3, center=TRUE, scale=TRUE)
+data.mlr <- cbind(data.temp2.log,data.temp3.scale)
+
+str(data.mlr)
+
+data.mlr <- na.omit(data.mlr)
+
+#Model with all variables
+fit.allvariables <- lm(Naiadinium_p~TP+SRP+TN+NO3.NO2+NH4+TN.TP+Temp+Zeu+Out+Prec+Rad, na.action=na.fail, data=data.mlr)
+vif(fit.allvariables) #High multicollinearity among independant variables
+
+#Correlation matrix
+rcorr(as.matrix(data.mlr), type="pearson")
+
+#Variables chosen for model are SRP+NO3.NO2+NH4+Temp+Zeu+Out+Prec
+```
+
+```{r}
+#Model for Naiadinium
+fit.N.mlr <- lm(Naiadinium_p~SRP+NO3.NO2+NH4+Temp+Zeu+Out+Prec, na.action=na.fail, data=data.mlr)
+vif(fit.N.mlr) #No multicollinearity
+output.N <- dredge(fit.N.mlr, rank=AIC)
+output.N
+summary(model.avg(output.N, subset = delta < 8)) #After delta 8 AIC difference between models is greater than 2
+```
+
+```{r}
+#Check assumptions for Naiadinium MLR
+#Explore dataset
+pairs(~Naiadinium_p+SRP+NO3.NO2+NH4+Temp+Zeu+Out+Prec, data=data.mlr)
+#Relationship between Naiadinium and the environmental variables are not clearly linear but nor are there any other clear patterns
+
+#Check assumptions for Naiadinium MLR
+#No autocorrelation
+dwtest(fit.N.mlr)
+#p-value is significant which suggests autocorrelation, however data was collected over multiple years and differences between years can cause false autocorrelation in the dw-test. This hypothesis can be tested by randomizing the order of the rows in the dataset and re-running the Durbin-Watson test
+
+data1.rand <- data.mlr[sample(nrow(data.mlr), replace=FALSE),] 
+data1.rand
+fit.data1.rand <- lm(Naiadinium_p~SRP+NO3.NO2+NH4+Temp+Zeu+Out+Prec, data=data1.rand)
+dwtest(fit.data1.rand)
+#p-values is now 0.5 which suggests no autocorrelation
+
+#Homoscedasticity and normality of residuals
+par(mfrow=c(2,2)) 
+plot(fit.N.mlr)
+
+#Although the red fit line is a bit all over the place for the residuals vs fitted plot, there is no clear increase in variance with predicted values so we consider the assumption of homoscedasticity fulfilled
+
+shapiro.test(fit.N.mlr$residuals) #OK
+
+x <- fit.N.mlr$residuals 
+y <- pnorm(summary(x), mean = mean(x, na.rm=TRUE), sd = sd(x, na.rm=TRUE)) 
+ks.test(x, y) 
+
+#The Komogorov-Smirnov test comes back as significant but not the shapiro test and the QQ plot looks good for the majority of the line so we accept the assumption that the residuals from the regression are normally distributed.
+
+```
+
+
+```{r}
+#Model for Microcystis
+fit.M.mlr <- lm(Microcystis_spp~SRP+NO3.NO2+NH4+Temp+Zeu+Out+Prec, na.action=na.fail, data=data.mlr)
+vif(fit.M.mlr)
+output.M <- dredge(fit.M.mlr, rank=AIC)
+output.M
+summary(model.avg(output.M, subset = delta < 8)) #After delta 8 AIC difference between models is greater than 2
+```
+
+
+
+```{r}
+#Check assumptions for Microcystis MLR
+
+#Explore dataset
+pairs(~Microcystis_spp+SRP+NO3.NO2+NH4+Temp+Zeu+Out+Prec, data=data.mlr)
+#Relationship between Microcystis and the environmental variables are not clearly linear but nor are there any other clear patterns
+
+dwtest(fit.M.mlr)
+data1.rand <- data.mlr[sample(nrow(data.mlr), replace=FALSE),] 
+data1.rand
+fit.data1.rand.M <- lm(Microcystis_spp~SRP+NO3.NO2+NH4+Temp+Zeu+Out+Prec, data=data1.rand) 
+dwtest(fit.data1.rand.M)
+#Same as for Naiadinium, p-value is significant which suggests autocorrelation, however data was collected over multiple years and differences between years can cause false autocorrelation in the dw-test. This hypothesis can be tested by randomizing the order of the rows in the dataset and re-running the Durbin-Watson test in which case the result is non-significant.
+
+#Homoscedasticity and normality of residuals
+par(mfrow=c(2,2)) 
+plot(fit.M.mlr)
+
+#Residuals versus fitted plot has a bit more spread as predicted values increase but I would still argue that variance is similarly high in the beginning and end so the assumption of homoscedasticity can be accepted
+
+shapiro.test(fit.M.mlr$residuals) #OK
+
+x <- fit.M.mlr$residuals 
+y <- pnorm(summary(x), mean = mean(x, na.rm=TRUE), sd = sd(x, na.rm=TRUE)) 
+ks.test(x, y) #Not really a pass
+
+#Again the Komogorov-Smirnov test comes back as significant but not the shapiro test and the QQ plot looks decent for the majority of the line so we accept the assumption that the residuals from the regression are normally distributed.
+
+```

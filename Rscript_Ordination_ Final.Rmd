@@ -1,0 +1,163 @@
+---
+title: "EW Lake Sampling"
+author: "Sandra Rabow"
+date: "11/24/2021"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+
+
+# Libraries
+```{r include=FALSE}
+
+library(readxl)
+library(vegan)
+
+```
+
+
+# Working directory and data
+```{r include=FALSE}
+data.ord <- read_excel('EW_Data_Stats')
+
+#Look at data
+str(data.ord)
+
+#Remove month of May
+data.temp <- subset(data.ord, data.ord$Month!=5) 
+data.temp
+
+#Phytoplankton ordination with environmental envfit, remove columns with zooplankton because there are a lot of NA-values.
+data_env <- data.temp[,c(1:14,20:32)]
+str(data_env)
+
+#Missing temperature for the last sampling date in October 2019, which is removed to be able to run ordination which cannot have missing rows
+data_env_ord <- na.omit(data_env)
+str(data_env_ord)
+
+
+#Not sure why but some of my data is showing up as character instead of numeric - below is a fix.
+data_env_ord$TP <- as.numeric(data_env_ord$TP)
+data_env_ord$SRP <- as.numeric(data_env_ord$SRP)
+data_env_ord$TN <- as.numeric(data_env_ord$TN)
+data_env_ord$NH4 <- as.numeric(data_env_ord$NH4)
+data_env_ord$NO3.NO2 <- as.numeric(data_env_ord$NO3.NO2)
+data_env_ord$TN.TP <- as.numeric(data_env_ord$TN.TP)
+data_env_ord$DIN <- as.numeric(data_env_ord$DIN)
+data_env_ord$DIN.DIP <- as.numeric(data_env_ord$DIN.DIP)
+
+#Phytoplankton ordination with zooplankton envfit
+data_zoo <- data.temp[,c(1:19)]
+str(data_zoo)
+
+#Remove NA rows for zooplankton data
+data_zoo_ord <- na.omit(data_zoo)
+data_zoo_ord
+
+```
+
+
+# Response variables
+```{r}
+
+#Response variables (phytoplankotn biomass data) for ordinations and log transformation
+resp_env <- data_env_ord[,c(5:13)]
+resp_zoo <- data_zoo_ord[,c(5:13)]
+
+resp_env_log <- log10(10*resp_env + 1)
+resp_zoo_log <- log10(10*resp_zoo + 1)
+
+```
+
+# Response variables
+```{r}
+#Response variables (phytoplankotn biomass data) for ordinations and log transformation
+resp_env <- data_env_ord[,c(5:13)]
+resp_zoo <- data_zoo_ord[,c(5:13)]
+
+resp_env_log <- log10(10*resp_env + 1)
+resp_zoo_log <- log10(10*resp_zoo + 1)
+```
+
+
+# PCA
+```{r}
+resp_env_log_pca <- rda(resp_env_log)
+plot(resp_env_log_pca)
+
+resp_zoo_log_pca <- rda(resp_zoo_log)
+plot(resp_zoo_log_pca)
+
+print(summary(resp_env_log_pca))
+print(summary(resp_zoo_log_pca))
+
+# Extract site scores environmental PCA
+site_scores_env <- scores(resp_env_log_pca, display = "sites")
+# Extract species scores environmental PCA
+species_scores_env <- scores(resp_env_log_pca, display = "species")
+
+as.data.frame(site_scores_env)
+as.data.frame(species_scores_env)
+
+# Extract site scores zooplankton PCA
+site_scores_zoo <- scores(resp_zoo_log_pca, display = "sites")
+# Extract species scores
+species_scores_zoo <- scores(resp_zoo_log_pca, display = "species")
+
+as.data.frame(site_scores_zoo)
+as.data.frame(species_scores_zoo)
+```
+
+
+# Environmental variables
+```{r}
+
+str(data_env_ord)
+env_ord <- data_env_ord[,c(15:19,22:27)] 
+str(env_ord)
+
+str(data_zoo_ord)
+zoo_ord <- data_zoo_ord[,c(15:19)] 
+str(zoo_ord)
+```
+
+# Unconstrained ordinations
+```{r}
+
+#Unconstrained PCA with environmnetal variables
+fit.env.pca <- envfit(resp_env_log_pca, env_ord, perm=999)
+ordiplot(resp_env_log_pca, type='text')
+plot(fit.env.pca)
+
+#Unconstrained PCA with zooplankton
+fit.zoo.pca <- envfit(resp_zoo_log_pca, zoo_ord, perm=999)
+ordiplot(resp_zoo_log_pca, type='text')
+plot(fit.zoo.pca)
+
+#For plotting fit.env.ca
+x_env <- scores(fit.env.pca, 'vectors', choices=1:2)
+y_env <- x_env*ordiArrowMul(fit.env.pca)
+as.data.frame(y_env)
+
+#For reporting
+print(fit.env.pca)
+print(scores(fit.env.pca, "vectors"))
+
+
+#For plotting fit.zoo.ca
+x_zoo <- scores(fit.zoo.pca, 'vectors', choices=1:2)
+y_zoo <- x_zoo*ordiArrowMul(fit.zoo.pca)
+as.data.frame(y_zoo)
+
+#For reporting
+print(fit.zoo.pca)
+print(scores(fit.zoo.pca, "vectors"))
+
+
+```
+
+
+
+
